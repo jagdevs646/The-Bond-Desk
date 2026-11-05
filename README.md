@@ -34,25 +34,6 @@ python server.py
 
 Open [localhost:8000](http://127.0.0.1:8000). On Windows, use `py -3.12 server.py` if your Python launcher is `py`. Node.js is optional and enables the cross-language calculation tests.
 
-## Deploy
-
-Both hosts serve the frontend and the Python pricing API on the same domain. The default configuration requires no database, API keys, or application secrets. Choose one host.
-
-### Vercel
-
-1. Open [Vercel New Project](https://vercel.com/new), connect GitHub, and **Import** the existing `jagdevs646/The-Bond-Desk` repository.
-2. Keep the **Root Directory** at the repository root. Use **Other** as the framework preset. Leave the build command empty. The checked-in `vercel.json` selects `public` as the output directory.
-3. Click **Deploy**. Vercel serves the assets from `public/` and exposes `api/analyze.py` as the Python function at `/api/analyze`.
-4. Open the assigned domain and perform the verification below.
-
-[Vercel Git integration](https://vercel.com/docs/git/vercel-for-github) · [Python Functions](https://vercel.com/docs/functions/runtimes/python)
-
-### Render
-
-1. Open the [Render dashboard](https://dashboard.render.com/), select **New → Blueprint**, connect GitHub, and select this repository.
-2. Choose `main` and keep the Blueprint path at `render.yaml`. Review the single Python web service and selected free instance plan, then click **Deploy Blueprint**.
-3. After the service is live, open its assigned domain. The Blueprint installs Gunicorn, runs the tests, binds the web service to Render’s assigned port, and configures the API health check.
-
 If you prefer manual setup, select **New → Web Service**, choose Python, and leave the root directory at the repository root. Use these settings from the Blueprint:
 
 | Setting | Value |
