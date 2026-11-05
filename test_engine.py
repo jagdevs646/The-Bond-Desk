@@ -14,6 +14,19 @@ profile = sample["profile"]
 
 
 class BondTest(unittest.TestCase):
+    def test_repayment_screen_and_quote_size(self):
+        for fields in ({"repayment":"Amortizing"}, {"sample":False}):
+            result = analyze(dict(base, **fields), profile)
+            self.assertTrue(result["blocked"])
+            self.assertNotIn("ytm", result)
+            self.assertEqual(result["verdict"], "Review")
+        b = dict(base, repayment="Bullet", face=10000, coupon=11.7, frequency=12, maturity="2028-12-16")
+        single = analyze(dict(b, order=dict(quantity=1,total=9989.91,fees=0)),profile)
+        six = analyze(dict(b, order=dict(quantity=6,total=59939.46,fees=0)),profile)
+        self.assertAlmostEqual(single["ytm"],six["ytm"])
+        mistaken = analyze(dict(b, order=dict(quantity=6,total=9989.91,fees=0)),profile)
+        self.assertAlmostEqual(mistaken["ytm"],128.32,places=2)
+
     def test_par_and_clean_dirty(self):
         r = analyze(dict(base, price=100), profile)
         self.assertAlmostEqual(r["ytm"], base["coupon"], places=9)
@@ -72,6 +85,7 @@ class BondTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"),"Node.js is optional for browser parity tests")
     def test_browser_parity(self):
         inputs = [[dict(base, **fields),dict(profile, **criteria)] for fields,criteria in [
+            ({"repayment":"Amortizing"},{}), ({"sample":False},{}),
             ({"order":{"quantity":3,"fees":15,"total":3120}},{"settlement":"2027-02-02"}),
             ({"order":{"quantity":2,"fees":10,"total":None},"call":"Single date","callDate":"2028-11-05"},{}),
             ({},{}),({"coupon":0,"price":125,"frequency":12},{}),

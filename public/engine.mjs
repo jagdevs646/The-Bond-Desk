@@ -25,6 +25,11 @@ function solve(flows,cost,f){
 }
 export function analyze(b,p){
  check(typeof b.name==='string'&&b.name.trim()&&b.name.length<=80,'Enter a bond name (up to 80 characters).');
+ const repayment=b.repayment??(b.sample===false?'Unknown':'Bullet');
+ if(repayment!=='Bullet'){
+   const reason=repayment==='Amortizing'?'Principal is repaid in installments. A dated principal and interest schedule is required for an XIRR calculation.':'Confirm how principal is repaid before using this valuation.';
+   return {blocked:true,verdict:'Review',missing:[reason],fail:[],edge:null,worst:null,required:null,duration:null};
+ }
  const f=b.frequency;check([1,2,4,12].includes(f),'Choose a payment frequency.');
  const face=number(b,'face',1,1e9),coupon=number(b,'coupon',0,50);
  const benchmark=number(b,'benchmark',-5,50),premium=number(b,'premium',0,50),target=number(p,'target',-5,50),horizon=number(p,'horizon',0.1,100);

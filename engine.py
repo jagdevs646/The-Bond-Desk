@@ -52,6 +52,11 @@ def solve(flows, price, frequency):
 
 def analyze(b, p):
     require(isinstance(b["name"], str) and b["name"].strip() and len(b["name"]) <= 80, "Enter a bond name.")
+    repayment = b.get("repayment", "Unknown" if b.get("sample") is False else "Bullet")
+    if repayment != "Bullet":
+        reason = ("Principal is repaid in installments. A dated principal and interest schedule is required for an XIRR calculation."
+                  if repayment == "Amortizing" else "Confirm how principal is repaid before using this valuation.")
+        return dict(blocked=True, verdict="Review", missing=[reason], fail=[], edge=None, worst=None, required=None, duration=None)
     f = b["frequency"]
     require(type(f) is int and f in (1, 2, 4, 12), "Choose a payment frequency.")
     face = number(b, "face", 1, 1e9)

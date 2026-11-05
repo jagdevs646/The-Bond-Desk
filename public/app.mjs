@@ -37,6 +37,7 @@ function analyzePage(){
  const ix=active(),b=bonds[ix],r=results[ix];
  let html=head('Bond analysis','Evaluate the price, return and risk of a fixed-rate bond.',btn('edit','Edit bond','edit',true));
  html+='<section class="cert"><div class="copy"><span class="micro">'+(b.sample?'Illustrative bond':'Your bond')+'</span><h2>'+esc(b.name)+'</h2><p>'+pct(b.coupon)+' fixed coupon &nbsp;·&nbsp; INR &nbsp;·&nbsp; '+dt(b.maturity,true)+' <span class="rating">'+esc(b.rating)+'</span></p></div></section>';
+ if(r.blocked)return html+'<section class="panel"><h2>Valuation on hold</h2><p class="after">'+esc(r.missing[0])+'</p><p class="sub">This calculator prices bonds that return all principal at maturity. This entry is excluded from purchase rankings.</p></section><div class="after"><a href="#compare">View all bonds</a></div>';
  const metrics=r.price===null
    ? [metric('Fair clean price',fmt(r.fair),'Per ₹100 face value'),
       metric('Required yield',pct(r.required),'Effective annual hurdle'),
@@ -125,10 +126,12 @@ function openEditor(mode,id=chosen){
  else if(mode==='remove'){title='Remove bond';save='Remove bond';body='<p>Remove <b>'+esc(b.name)+'</b> from this workspace?</p>'}
  else{
  const original=mode==='edit'?results[bonds.findIndex(x=>x.id===id)]:null;
- const order=b.order??{quantity:1,total:original?Number((original.cost*b.face/100).toPrecision(15)):'',fees:original?Number((original.fee*b.face/100).toPrecision(15)):0};
- const broker='<h3 class="after">Broker quote</h3><p class="sub">Have a quote? Copy the final order amount for settlement on '+dt(profile.settlement)+'. Leave it blank to calculate your purchase limit.</p><div class="fields">'+field('total','Total payable (₹, optional)',order.total,'number',[],'Include accrued interest and all purchase fees.',true)+field('quantity','Number of bonds',order.quantity,'number')+field('fees','Total order fees (₹)',order.fees,'number',[],'Enter zero if there are no fees.')+'</div>';
+ const order=b.order??{quantity:1,total:original&&!original.blocked?Number((original.cost*b.face/100).toPrecision(15)):'',fees:original&&!original.blocked?Number((original.fee*b.face/100).toPrecision(15)):0};
+ const basis=b.quoteBasis??(mode==='add'?'unit':'order');
+ const amount=basis==='unit'&&order.total!=null&&order.total!==''?(order.total-order.fees)/order.quantity:order.total;
+ const broker='<h3 class="after">Broker quote</h3><p class="sub">Have a quote? Copy the final order amount for settlement on '+dt(profile.settlement)+'. Leave it blank to calculate your purchase limit.</p><div class="fields">'+field('quoteBasis','Broker quote format',basis,'select',[['unit','Price per bond (including accrued interest, before fees)'],['order','Total for all bonds (including fees)']],'',true)+field('total','Quoted amount (₹, optional)',amount,'number',[],'Copy the amount for the selected format.',true)+field('quantity','Number of bonds',order.quantity,'number')+field('fees','Total order fees (₹)',order.fees,'number',[],'Enter zero if there are no fees.')+'</div>';
  title=mode==='add'?'Add a bond':'Edit bond';save=mode==='add'?'Add and analyze':'Apply changes';
- body='<div class="fields">'+field('name','Bond or issuer name',b.name,'text',[],'',true)+n('coupon','Annual coupon (%)')+n('face','Face value per bond (₹)')+field('maturity','Maturity date',b.maturity,'date')+sel('frequency','Coupon frequency',Object.entries(freqs))+'</div>'+broker+'<h3 class="after">Return and risk</h3><div class="fields">'+n('benchmark','Benchmark yield (%)','Effective annual rate for similar maturity.')+n('premium','Required risk premium (%)','Add to the benchmark for credit and liquidity risk.')+sel('rating','Issue credit rating',['Unknown',...grades])+sel('liquidity','Liquidity assessment',['Unknown','Low','Medium','High'])+sel('call','Call provision',['Unknown / other','None','Single date'])+'</div><div id="callFields" class="fields after">'+field('callDate','Optional call date',b.callDate,'date',[],'Use a future coupon date.')+n('callPrice','Call redemption per ₹100')+'</div>';
+ body='<div class="fields">'+field('name','Bond or issuer name',b.name,'text',[],'',true)+n('coupon','Annual coupon (%)')+n('face','Face value per bond (₹)')+field('maturity','Maturity date',b.maturity,'date')+sel('frequency','Coupon frequency',Object.entries(freqs))+field('repayment','Principal repayment',b.repayment??'Unknown','select',[['Unknown','Select or verify repayment'],['Bullet','All principal at maturity'],['Amortizing','Principal repaid in installments']],'',true)+'</div>'+broker+'<p id="quotePreview" class="note" aria-live="polite"></p><h3 class="after">Return and risk</h3><div class="fields">'+n('benchmark','Benchmark yield (%)','Effective annual rate for similar maturity.')+n('premium','Required risk premium (%)','Add to the benchmark for credit and liquidity risk.')+sel('rating','Issue credit rating',['Unknown',...grades])+sel('liquidity','Liquidity assessment',['Unknown','Low','Medium','High'])+sel('call','Call provision',['Unknown / other','None','Single date'])+'</div><div id="callFields" class="fields after">'+field('callDate','Optional call date',b.callDate,'date',[],'Use a future coupon date.')+n('callPrice','Call redemption per ₹100')+'</div>';
  if(bonds.every(x=>x.sample))body+='<p class="note">Saving your first bond replaces the illustrative workspace.</p>';
  }
  form.innerHTML='<div class="dialoghead"><h2 id="dialogTitle">'+title+'</h2><button type="button" data-close class="iconbtn" aria-label="Close">'+icon('close')+'</button></div><div class="dialogbody">'+body+'</div><div class="dialogfoot"><p class="error" role="alert"></p><button type="button" data-close>'+(['add','edit'].includes(mode)?'Close':'Cancel')+'</button><button class="primary" type="submit">'+save+'</button></div>';
@@ -145,6 +148,15 @@ function openEditor(mode,id=chosen){
    form.querySelector('.dialogfoot').prepend(status);
    if(draft)setDraftStatus('Draft restored.');
  }
+ if(isBondEditor()){
+   const preview=()=>{
+     const value=form.elements.total.valueAsNumber, qty=form.elements.quantity.valueAsNumber, fees=form.elements.fees.valueAsNumber;
+     const total=form.elements.quoteBasis.value==='unit'?value*qty+fees:value;
+     const each=total/qty;
+     $('#quotePreview').textContent=Number.isFinite(each)&&qty>0?'Order total '+currency(total)+' · '+currency(each)+' per bond including fees.'+(qty>1&&each<form.elements.face.valueAsNumber*.5?' Check the quote format: the amount per bond is below half its face value.':''):'';
+   };
+   form.oninput=preview;preview();
+ }else form.oninput=null;
  showCall();$('#f-call')?.addEventListener('change',showCall);dialog.showModal();dialog.scrollTop=0;form.querySelector('input, select')?.focus({preventScroll:true});
 }
 function closeEditor(){dialog.close()}
@@ -196,7 +208,7 @@ form.addEventListener('submit',async e=>{
  if(editMode==='criteria')nextP={...nextP,...data};
  else if(editMode==='remove'){nextB=nextB.filter(b=>b.id!==editId);if(nextChosen===editId)nextChosen=nextB[0].id}
  else{
- const order={total:form.elements.total.value===''?null:data.total,quantity:data.quantity,fees:data.fees};
+ const order={total:form.elements.total.value===''?null:(data.quoteBasis==='unit'?data.total*data.quantity+data.fees:data.total),quantity:data.quantity,fees:data.fees};
  delete data.total;delete data.quantity;delete data.fees;
  const old=editMode==='edit'?bonds.find(b=>b.id===editId):{};const id=editMode==='edit'?editId:'bond-'+Array.from(crypto.getRandomValues(new Uint32Array(2))).join('-');const b={callDate:'',callPrice:100,...old,...data,order,frequency:Number(data.frequency),id,sample:false};delete b.price;delete b.fee;nextB=nextB.filter(b=>!b.sample);const index=nextB.findIndex(b=>b.id===id);if(index===-1)nextB.push(b);else nextB[index]=b;nextChosen=id}
  if(nextB.length>20)throw Error('Compare up to 20 bonds. Remove one before adding another.');
