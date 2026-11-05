@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: the-bond-desk
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r deploy/render-requirements.txt && python -m unittest discover
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 server:application
+    healthCheckPath: /api/analyze

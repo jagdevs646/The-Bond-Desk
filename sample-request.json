@@ -1,0 +1,50 @@
+{
+  "bonds": [
+    {
+      "id": "meridian",
+      "name": "Meridian Infrastructure",
+      "coupon": 7.5,
+      "face": 1000,
+      "maturity": "2031-11-05",
+      "frequency": 2,
+      "rating": "AA",
+      "liquidity": "High",
+      "benchmark": 6.5,
+      "premium": 0.75,
+      "call": "None",
+      "callDate": "",
+      "callPrice": 100,
+      "sample": true,
+      "price": 98.5,
+      "fee": 0
+    },
+    {
+      "id": "arbor",
+      "name": "Arbor Energy",
+      "coupon": 8.6,
+      "face": 1000,
+      "maturity": "2032-11-05",
+      "frequency": 1,
+      "rating": "BBB",
+      "liquidity": "Medium",
+      "benchmark": 6.6,
+      "premium": 1.5,
+      "call": "None",
+      "callDate": "",
+      "callPrice": 100,
+      "sample": true,
+      "order": {
+        "quantity": 1,
+        "total": 1016.0,
+        "fees": 1.0
+      }
+    }
+  ],
+  "profile": {
+    "target": 7.25,
+    "floor": "A",
+    "horizon": 7,
+    "liquidity": "Medium",
+    "settlement": "2026-11-05"
+  }
+}
