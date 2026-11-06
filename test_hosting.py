@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 from wsgiref.util import setup_testing_defaults
 
-from api.analyze import app
+from api.analyze import app, MAX_BODY
 from server import application
 
 SAMPLE = (Path(__file__).resolve().parent / "sample-request.json").read_bytes()
@@ -41,7 +41,7 @@ class HostingTests(unittest.TestCase):
             ("POST", b"{", "application/json", "400"),
             ("POST", b"{}", "application/json", "400"),
             ("POST", SAMPLE, "text/plain", "415"),
-            ("POST", b"x" * 65537, "application/json", "413"),
+            ("POST", b"x" * (MAX_BODY+1), "application/json", "413"),
             ("DELETE", b"", "application/json", "405"),
         ]:
             with self.subTest(expected=expected):

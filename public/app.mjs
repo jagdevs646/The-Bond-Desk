@@ -26,7 +26,7 @@ function chart(r){
  const pts=r.shocks, y=pts.map(s=>s.price),lo=Math.min(...y),hi=Math.max(...y),x=i=>57+i*(520/(pts.length-1)),v=a=>135-(a-lo)/(hi-lo||1)*109;
  const line=pts.map((p,i)=>(i?'L':'M')+x(i)+' '+v(p.price)).join(' '), ci=pts.findIndex(p=>p.bp===0);
  let grid='';for(let i=0;i<=3;i++){const val=lo+(hi-lo)*i/3;grid+='<path d="M57 '+v(val)+'H577" stroke="#d7dfd5" stroke-dasharray="3 4"/><text x="46" y="'+(v(val)+4)+'" text-anchor="end">'+fmt(val,1)+'</text>'}
- return '<svg class="chart" role="img" aria-label="Clean price decreases as yield rises. Exact values are available under Rate scenarios." viewBox="0 0 610 170"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#9cbda4" stop-opacity=".48"/><stop offset="1" stop-color="#dce9d9" stop-opacity=".12"/></linearGradient></defs>'+grid+'<path d="'+line+' L577 135H57Z" fill="url(#area)"/><path d="M'+x(ci)+' 15V135" stroke="#a58c4d" stroke-dasharray="3 3"/><path d="'+line+'" fill="none" stroke="#245b46" stroke-width="2.8"/>'+pts.map((p,i)=>'<g><title>'+pct(r.ytm+p.bp/100)+' yield · '+fmt(p.price)+' clean price</title><circle cx="'+x(i)+'" cy="'+v(p.price)+'" r="'+(i===ci?5.4:3.3)+'" fill="'+(i===ci?'#ab8d52':'#245b46')+'"/>'+(i%2===0?'<text text-anchor="middle" x="'+x(i)+'" y="160">'+pct(r.ytm+p.bp/100)+'</text>':'')+'</g>').join('')+'</svg>'
+ return '<svg class="chart" role="img" aria-label="Price decreases as yield rises. Exact values are available under Rate scenarios." viewBox="0 0 610 170"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#9cbda4" stop-opacity=".48"/><stop offset="1" stop-color="#dce9d9" stop-opacity=".12"/></linearGradient></defs>'+grid+'<path d="'+line+' L577 135H57Z" fill="url(#area)"/><path d="M'+x(ci)+' 15V135" stroke="#a58c4d" stroke-dasharray="3 3"/><path d="'+line+'" fill="none" stroke="#245b46" stroke-width="2.8"/>'+pts.map((p,i)=>'<g><title>'+pct(r.ytm+p.bp/100)+' yield · '+fmt(p.price)+' clean price</title><circle cx="'+x(i)+'" cy="'+v(p.price)+'" r="'+(i===ci?5.4:3.3)+'" fill="'+(i===ci?'#ab8d52':'#245b46')+'"/>'+(i%2===0?'<text text-anchor="middle" x="'+x(i)+'" y="160">'+pct(r.ytm+p.bp/100)+'</text>':'')+'</g>').join('')+'</svg>'
 }
 function rec(b,r){
  const positive=r.verdict==='Consider purchase';
@@ -34,34 +34,34 @@ function rec(b,r){
  return '<section class="panel recommend"><div class="plothead"><h2>Investor fit</h2><span class="symbol">'+icon('sliders')+'</span></div><div class="verdict '+(positive?'':'warn')+'"><i>'+icon(positive?'check':'info')+'</i>'+r.verdict+'</div><p class="reasons">'+intro+'</p><p class="screenline">Modeled return <b>'+pct(r.worst)+'</b> &nbsp; / &nbsp; Required <b>'+pct(r.required)+'</b><br>Effective annual yields, before tax.</p><button class="linkbtn" data-act="criteria">Edit investment criteria '+icon('arrow')+'</button></section>';
 }
 function analyzePage(){
- const ix=active(),b=bonds[ix],r=results[ix];
+ const ix=active(),b=bonds[ix],r=results[ix],priceLabel=r.dated?'Price incl. accrued':'Clean price';
  let html=head('Bond analysis','Evaluate the price, return and risk of a fixed-rate bond.',btn('edit','Edit bond','edit',true));
  html+='<section class="cert"><div class="copy"><span class="micro">'+(b.sample?'Illustrative bond':'Your bond')+'</span><h2>'+esc(b.name)+'</h2><p>'+pct(b.coupon)+' fixed coupon &nbsp;·&nbsp; INR &nbsp;·&nbsp; '+dt(b.maturity,true)+' <span class="rating">'+esc(b.rating)+'</span></p></div></section>';
- if(r.blocked)return html+'<section class="panel"><h2>Valuation on hold</h2><p class="after">'+esc(r.missing[0])+'</p><p class="sub">This calculator prices bonds that return all principal at maturity. This entry is excluded from purchase rankings.</p></section><div class="after"><a href="#compare">View all bonds</a></div>';
+ if(r.blocked)return html+'<section class="panel"><h2>Valuation on hold</h2><p class="after">'+esc(r.missing[0])+'</p><p class="sub">Choose the repayment type in Edit bond. For installments, add the payment dates, interest and principal in Payment schedule. Incomplete entries are excluded from purchase rankings.</p>'+btn('edit','Enter payment schedule','edit',true)+'</section><div class="after"><a href="#compare">View all bonds</a></div>';
  const metrics=r.price===null
-   ? [metric('Fair clean price',fmt(r.fair),'Per ₹100 face value'),
+   ? [metric(r.dated?'Purchase limit before fees':'Fair clean price',fmt(r.fair),'Per ₹100 '+(r.dated?'outstanding principal':'face value')),
       metric('Required yield',pct(r.required),'Effective annual hurdle'),
-      metric('Annual coupon income',currency(r.annualCoupon),'Per bond, before tax'),
-      metric('Accrued interest',currency(r.accrued*b.face/100),'Per bond at settlement')]
-   : [metric('Yield to maturity',pct(r.ytm),'Nominal annual · before fees'),
+      metric(r.dated?'Remaining interest':'Annual coupon income',currency(r.dated?r.totalInterest:r.annualCoupon),'Per bond, before tax'),
+      metric(r.dated?'Payments remaining':'Accrued interest',r.dated?r.flows.length:currency(r.accrued*b.face/100),r.dated?'From your schedule':'Per bond at settlement')]
+   : [metric(r.dated?'Annual return (XIRR)':'Yield to maturity',pct(r.ytm),r.dated?'Effective annual · before fees':'Nominal annual · before fees'),
       metric('Required yield',pct(r.required),'Effective annual hurdle'),
-      metric('Fair clean price',fmt(r.fair),'Per ₹100 face value'),
+      metric(r.dated?'Purchase limit before fees':'Fair clean price',fmt(r.fair),'Per ₹100 '+(r.dated?'outstanding principal':'face value')),
       metric('Modified duration',fmt(r.duration)+' <span class="unit">yrs</span>','To final maturity')];
  html+='<div class="metrics">'+metrics.join('')+'</div>';
  if(r.price===null){
    html+='<div class="cols"><section class="panel"><h2>Your purchase limit</h2><p class="sub">At a required return of '+pct(r.required)+', the maximum total payable for one bond is <b>'+currency((r.fair+r.accrued+r.fee)*b.face/100)+'</b>, including accrued interest and fees.</p><p class="after">Compare this with the total on your broker’s order screen.</p><button class="linkbtn after" data-act="edit">Enter broker amount '+icon('arrow')+'</button></section>'+rec(b,r)+'</div>';
- }else html+='<div class="cols"><section class="panel"><div class="plothead"><h2>Price–yield curve</h2><span class="symbol">'+icon('chart')+'</span></div><p class="sub">Clean price per ₹100 as the market yield changes.</p>'+chart(r)+'<div class="chartnote"><span class="dot"></span> Clean price '+fmt(r.price)+' at '+pct(r.ytm)+' yield</div></section>'+rec(b,r)+'</div>';
+ }else html+='<div class="cols"><section class="panel"><div class="plothead"><h2>Price–yield curve</h2><span class="symbol">'+icon('chart')+'</span></div><p class="sub">'+priceLabel+' per ₹100 as the market yield changes.</p>'+chart(r)+'<div class="chartnote"><span class="dot"></span> '+priceLabel+' '+fmt(r.price)+' at '+pct(r.ytm)+' yield</div></section>'+rec(b,r)+'</div>';
  html+='<section class="lower"><div class="tabs" aria-label="Analysis details">'+['Cash flows','Rate scenarios','Bond details','Macro scenario'].map(t=>'<button class="tab '+(t===detail?'active':'')+'" aria-pressed="'+(t===detail)+'" data-tab="'+t+'">'+t+'</button>').join('')+'</div><div class="bodypad">';
  if(detail==='Cash flows'){
  const rows=expanded?r.flows:r.flows.slice(0,4);
- html+='<div class="sectionhead tablehead"><div><h3>Expected cash flows</h3><p class="sub">One bond · '+currency(b.face)+' face value · held to maturity</p></div><button class="linkbtn" data-act="csv">'+icon('download')+' Download CSV</button></div><div class="scroll"><table><thead><tr><th>Payment date</th><th>Coupon (₹)</th><th>Principal (₹)</th><th>Total (₹)</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+dt(x.date)+'</td><td>'+fmt(b.face*b.coupon/100/b.frequency)+'</td><td>'+fmt(x.date===b.maturity?b.face:0)+'</td><td>'+fmt(x.amount*b.face/100)+'</td></tr>').join('')+'</tbody></table></div>';
+ html+='<div class="sectionhead tablehead"><div><h3>Expected cash flows</h3><p class="sub">One bond · '+currency(b.face)+' face value · held to maturity</p></div><button class="linkbtn" data-act="csv">'+icon('download')+' Download CSV</button></div><div class="scroll"><table><thead><tr><th>Payment date</th><th>Interest (₹)</th><th>Principal (₹)</th><th>Total (₹)</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+dt(x.date)+'</td><td>'+fmt(x.interest??b.face*b.coupon/100/b.frequency)+'</td><td>'+fmt(x.principal??(x.date===b.maturity?b.face:0))+'</td><td>'+fmt(x.amount*b.face/100)+'</td></tr>').join('')+'</tbody></table></div>';
  if(r.flows.length>4)html+='<button class="linkbtn after" data-act="expand">'+(expanded?'Show fewer payments':'Show all '+r.flows.length+' payments')+'</button>';
  }else if(detail==='Rate scenarios' && r.price===null){
  html+='<p>Enter the broker’s total payable to stress-test the offered price.</p>';
  }else if(detail==='Rate scenarios'){
- html+='<h3>Interest-rate stress test</h3><p class="sub tablehead">Instant repricing of maturity cash flows. Credit quality and the settlement date stay fixed.</p><div class="scroll"><table><tr><th>Yield shock</th><th>Market yield</th><th>Clean price</th><th>Price change</th></tr>'+r.shocks.map(x=>'<tr><td>'+(x.bp>0?'+':'')+x.bp+' bp</td><td>'+pct(r.ytm+x.bp/100)+'</td><td>'+fmt(x.price)+'</td><td>'+pct((x.price/r.price-1)*100)+'</td></tr>').join('')+'</table></div>';
+ html+='<h3>Interest-rate stress test</h3><p class="sub tablehead">Instant repricing of maturity cash flows. Credit quality and the settlement date stay fixed.</p><div class="scroll"><table><tr><th>Yield shock</th><th>Market yield</th><th>'+(r.dated?'Price incl. accrued':'Clean price')+'</th><th>Price change</th></tr>'+r.shocks.map(x=>'<tr><td>'+(x.bp>0?'+':'')+x.bp+' bp</td><td>'+pct(r.ytm+x.bp/100)+'</td><td>'+fmt(x.price)+'</td><td>'+pct((x.price/r.price-1)*100)+'</td></tr>').join('')+'</table></div>';
  }else if(detail==='Macro scenario'){html+=macroPanel(b,r)}else{
- html+='<h3>Quote and assumptions</h3>'+terms([['Settlement',dt(profile.settlement)],['Maturity',dt(b.maturity)],['Clean quote / ₹100',fmt(r.price)],['Accrued interest / ₹100',fmt(r.accrued)],['Dirty price / ₹100',fmt(r.dirty)],['Purchase fee / ₹100',fmt(r.fee)],['Total cost per bond',r.cost==null?'—':currency(r.cost*b.face/100)],['Coupon frequency',freqs[b.frequency]],['Current yield',pct(r.current)],['Net YTM (nominal)',pct(r.net)],['Call provision',esc(b.call)],['Net yield to call (nominal)',r.callYield==null?'—':pct(r.callYield)],...(r.callYield!=null?[['Call date',dt(b.callDate)],['Call price / ₹100',fmt(b.callPrice)]]:[]),['Benchmark (effective)',pct(b.benchmark)],['Required risk premium',pct(b.premium)],['Liquidity assessment',esc(b.liquidity)],['Credit rating',esc(b.rating)]]);
+ html+='<h3>Quote and assumptions</h3>'+terms([['Settlement',dt(profile.settlement)],['Maturity',dt(b.maturity)],[r.dated?'Quote incl. accrued / ₹100':'Clean quote / ₹100',fmt(r.price)],['Accrued interest / ₹100',r.dated?'Included in broker quote':fmt(r.accrued)],['Dirty price / ₹100',fmt(r.dirty)],['Purchase fee / ₹100',fmt(r.fee)],['Total cost per bond',r.cost==null?'—':currency(r.cost*b.face/100)],['Coupon frequency',freqs[b.frequency]],['Current yield',pct(r.current)],[r.dated?'Net XIRR (effective)':'Net YTM (nominal)',pct(r.net)],['Call provision',esc(b.call)],['Net yield to call (nominal)',r.callYield==null?'—':pct(r.callYield)],...(r.callYield!=null?[['Call date',dt(b.callDate)],['Call price / ₹100',fmt(b.callPrice)]]:[]),['Benchmark (effective)',pct(b.benchmark)],['Required risk premium',pct(b.premium)],['Liquidity assessment',esc(b.liquidity)],['Credit rating',esc(b.rating)]]);
  }
  html+='</div></section><div class="bondlist"><label for="pick">Active bond</label><select id="pick">'+bonds.map(b=>'<option value="'+esc(b.id)+'" '+(b.id===chosen?'selected':'')+'>'+esc(b.name)+'</option>').join('')+'</select><button class="linkbtn" data-act="add">Add a bond '+icon('plus')+'</button></div>';
  return html;
@@ -77,6 +77,7 @@ function comparePage(){
  return h;
 }
 function macroPanel(b,r){
+ if(r.dated)return '<h3>Macro scenario</h3><p class="sub">Use Rate scenarios to reprice this dated payment schedule. The illustrative macro model applies only to regular bullet bonds.</p>';
  const values=macroInputs;
  const labels=['Inflation (%)','Government borrowing (% of GDP)','Fed funds rate (%)','USD/INR annual move (%)'];
  return '<h3>Macro scenario</h3><p class="sub tablehead">Explore the assumptions in the original calculator. These illustrative weights affect this scenario only. A positive FX move means a weaker rupee.</p><form id="macroForm"><div class="fields">'+labels.map((l,i)=>field('macro'+i,l,values[i],'number')).join('')+'</div><button class="after" type="submit">Reprice scenario</button></form><div id="macroResult" aria-live="polite" class="after">'+macroResult(b,r)+'</div><details><summary>How this scenario works</summary><p class="sub">Risk-free proxy = 1.5 + 0.75 × inflation + 0.12 × (borrowing − 6) + 0.25 × Fed rate + 0.15 × FX move, floored at 0.25%. Add the assumed rating spread (AAA 0.50, AA 1.00, A 1.50, BBB 2.50, BB 4.00, B 6.00, CCC 9.00 percentage points) and a term premium of 0.06 points per year capped at 1.50. Rating modifiers use their broad grade. Discount maturity payments at this nominal rate and deduct accrued interest. The coefficients are assumptions from the uploaded model.</p></details>';
@@ -102,8 +103,8 @@ function methodology(){return head('Methodology','How to read the numbers and ma
  ['Decide what return you need','Use a same-currency government yield of similar maturity, then add the premium you require for credit and liquidity risk. The hurdle is the higher of this sum and your personal minimum. Enter hurdle components as effective annual percentages. Sample inputs are hypothetical.'],
  ['Read the recommendation','Consider purchase means the modeled return meets your hurdle, the rating and liquidity pass your floors, and principal is due within your horizon (rounded to the nearest month). Skip identifies a failed screen. Review identifies missing risk inputs. Verify the rating, issuer finances, seniority, covenants and tradable quote against the issue documents before acting.'],
  ['Compare like with like','The comparison uses the lower of the fee-adjusted maturity yield and the modeled call yield, converted to an effective annual rate. Among qualifying INR bonds it selects the largest excess above each bond’s hurdle. Equal excess returns rounded to one basis point share the lead. Apply consistent benchmarks and risk premiums across candidates.'],
- ['Understand fair value and duration','Fair clean price is the maximum clean quote at your hurdle after accrual and fees, using the cheaper of call and maturity values. Modified duration estimates the percentage move in dirty price for a one-point change in nominal yield. The rate scenarios reprice maturity cash flows exactly. Callable bonds can behave differently when exercise becomes likely.'],
- ['Check the modeling conventions','Regular fixed coupons, bullet repayment at par and Actual/Actual coupon-period accrual. Dates are anchored to maturity, preserving month-end. YTM is nominal annual yield compounded at coupon frequency and excludes fees. Yields assume promised payments and reinvestment at the indicated rate. Returns are pre-tax. Irregular coupons, floating rates, amortisation, default losses, business-day adjustments and multiple call dates require a different model.'],
+ ['Understand fair value and duration','Fair clean price is the maximum clean quote at your hurdle after accrual and fees, using the cheaper of call and maturity values. Modified duration estimates the percentage move in dirty price for a one-point change in yield (effective annual for installment schedules, nominal for bullet bonds). The rate scenarios reprice maturity cash flows exactly. Callable bonds can behave differently when exercise becomes likely.'],
+ ['Check the modeling conventions','Regular fixed coupons, bullet repayment at par and Actual/Actual coupon-period accrual. Dates are anchored to maturity, preserving month-end. YTM is nominal annual yield compounded at coupon frequency and excludes fees. Yields assume promised payments and reinvestment at the indicated rate. Returns are pre-tax. For installments, enter every remaining payment in rupees per bond: date, interest and principal. Use outstanding principal at settlement as face value. Dates must follow settlement, principal must sum to face value, and the final principal payment must match maturity. XIRR uses actual days divided by 365 and includes purchase fees in the net return. The quote and purchase limit include accrued interest; clean price is not inferred. Coupon and frequency describe the bond but do not generate or change the entered schedule. Optional calls on installment bonds prevent a purchase recommendation. Floating rates, default losses, automatic business-day adjustments and multiple call dates are not modeled.'],
  ['Investor references','<a href="https://investor.sebi.gov.in/understanding_bonds.html" target="_blank" rel="noopener">SEBI · Understanding bonds ↗</a><br><a href="https://syndication.finra.org/content/bond-investing-and-due-diligence" target="_blank" rel="noopener">FINRA · Bond investing and due diligence ↗</a><br><a href="https://www.investor.gov/introduction-investing/investing-basics/glossary/callable-or-redeemable-bonds" target="_blank" rel="noopener">Investor.gov · Callable bonds ↗</a>'],
  ['Run your own copy','Your workspace is saved in this browser. Bond inputs are sent to the Python service for calculation. <a href="https://github.com/jagdevs646/The-Bond-Desk">Get the source and deployment instructions on GitHub</a>.']
  ].map(([t,body])=>'<article><h2>'+t+'</h2><p>'+body+'</p></article>').join('')+'</div>'}
@@ -118,7 +119,7 @@ function field(k,label,value,type='text',choices=[],hint='',wide=false){
  return '<label class="field '+(wide?'wide':'')+'" for="f-'+k+'">'+label+el+(hint?'<small>'+hint+'</small>':'')+'</label>'
 }
 function openEditor(mode,id=chosen){
- lastFocus=document.activeElement;editMode=mode;editId=id;
+ lastFocus=document.activeElement;editMode=mode;editId=id;removedPayment=null;
  const b=mode==='add'?{...examples[0],name:'',price:100,coupon:'',maturity:'',rating:'Unknown',liquidity:'Unknown',call:'Unknown / other',benchmark:'',premium:'',sample:false}:bonds.find(x=>x.id===id);
  const n=(k,l,h='')=>field(k,l,b[k],'number',[],h), sel=(k,l,choices)=>field(k,l,b[k],'select',choices);
  let body,title,save;
@@ -131,13 +132,14 @@ function openEditor(mode,id=chosen){
  const amount=basis==='unit'&&order.total!=null&&order.total!==''?(order.total-order.fees)/order.quantity:order.total;
  const broker='<h3 class="after">Broker quote</h3><p class="sub">Have a quote? Copy the final order amount for settlement on '+dt(profile.settlement)+'. Leave it blank to calculate your purchase limit.</p><div class="fields">'+field('quoteBasis','Broker quote format',basis,'select',[['unit','Price per bond (including accrued interest, before fees)'],['order','Total for all bonds (including fees)']],'',true)+field('total','Quoted amount (₹, optional)',amount,'number',[],'Copy the amount for the selected format.',true)+field('quantity','Number of bonds',order.quantity,'number')+field('fees','Total order fees (₹)',order.fees,'number',[],'Enter zero if there are no fees.')+'</div>';
  title=mode==='add'?'Add a bond':'Edit bond';save=mode==='add'?'Add and analyze':'Apply changes';
- body='<div class="fields">'+field('name','Bond or issuer name',b.name,'text',[],'',true)+n('coupon','Annual coupon (%)')+n('face','Face value per bond (₹)')+field('maturity','Maturity date',b.maturity,'date')+sel('frequency','Coupon frequency',Object.entries(freqs))+field('repayment','Principal repayment',b.repayment??'Unknown','select',[['Unknown','Select or verify repayment'],['Bullet','All principal at maturity'],['Amortizing','Principal repaid in installments']],'',true)+'</div>'+broker+'<p id="quotePreview" class="note" aria-live="polite"></p><h3 class="after">Return and risk</h3><div class="fields">'+n('benchmark','Benchmark yield (%)','Effective annual rate for similar maturity.')+n('premium','Required risk premium (%)','Add to the benchmark for credit and liquidity risk.')+sel('rating','Issue credit rating',['Unknown',...grades])+sel('liquidity','Liquidity assessment',['Unknown','Low','Medium','High'])+sel('call','Call provision',['Unknown / other','None','Single date'])+'</div><div id="callFields" class="fields after">'+field('callDate','Optional call date',b.callDate,'date',[],'Use a future coupon date.')+n('callPrice','Call redemption per ₹100')+'</div>';
+ body='<div class="fields">'+field('name','Bond or issuer name',b.name,'text',[],'',true)+n('coupon','Annual coupon (%)')+n('face','Face value / outstanding principal per bond (₹)','For installments, use principal still outstanding at settlement.')+field('maturity','Maturity date',b.maturity,'date')+sel('frequency','Coupon frequency',Object.entries(freqs))+field('repayment','Principal repayment',b.repayment??'Unknown','select',[['Unknown','Select or verify repayment'],['Bullet','All principal at maturity'],['Amortizing','Principal repaid in installments']],'',true)+'</div><section id="scheduleSection" class="after"><h3>Payment schedule</h3><p class="sub">Enter every remaining interest and principal payment after '+dt(profile.settlement)+', in rupees for <b>one bond</b>. Add a row for each date, including interest-only dates. Use 0 when a component is not paid. Copy the issuer or broker payout schedule; installments need not be equal.</p><p class="sub after">Face value above must be the principal still outstanding at settlement. Final principal repayment must match maturity. Coupon and frequency do not generate these amounts.</p><div id="scheduleRows"></div><button type="button" data-add-payment>Add payment date</button> <button type="button" data-undo-payment hidden>Undo removal</button><p id="scheduleTotal" class="note" aria-live="polite"></p></section>'+broker+'<p id="quotePreview" class="note" aria-live="polite"></p><h3 class="after">Return and risk</h3><div class="fields">'+n('benchmark','Benchmark yield (%)','Effective annual rate for similar maturity.')+n('premium','Required risk premium (%)','Add to the benchmark for credit and liquidity risk.')+sel('rating','Issue credit rating',['Unknown',...grades])+sel('liquidity','Liquidity assessment',['Unknown','Low','Medium','High'])+sel('call','Call provision',['Unknown / other','None','Single date'])+'</div><div id="callFields" class="fields after">'+field('callDate','Optional call date',b.callDate,'date',[],'Use a future coupon date.')+n('callPrice','Call redemption per ₹100')+'</div>';
  if(bonds.every(x=>x.sample))body+='<p class="note">Saving your first bond replaces the illustrative workspace.</p>';
  }
  form.innerHTML='<div class="dialoghead"><h2 id="dialogTitle">'+title+'</h2><button type="button" data-close class="iconbtn" aria-label="Close">'+icon('close')+'</button></div><div class="dialogbody">'+body+'</div><div class="dialogfoot"><p class="error" role="alert"></p><button type="button" data-close>'+(['add','edit'].includes(mode)?'Close':'Cancel')+'</button><button class="primary" type="submit">'+save+'</button></div>';
  function showCall(){if(!$('#callFields'))return;const show=$('#f-call').value==='Single date';$('#callFields').style.display=show?'grid':'none';$('#callFields').querySelectorAll('input').forEach(el=>{el.disabled=!show;el.required=show})}
  if(isBondEditor()){
    const draft=readDraft();
+   drawSchedule(draft?.paymentRows??b.schedule??[]);
    if(draft){
      for(const input of form.querySelectorAll('[name]')){
        if(Object.hasOwn(draft,input.name))input.value=draft[input.name];
@@ -155,10 +157,37 @@ function openEditor(mode,id=chosen){
      const each=total/qty;
      $('#quotePreview').textContent=Number.isFinite(each)&&qty>0?'Order total '+currency(total)+' · '+currency(each)+' per bond including fees.'+(qty>1&&each<form.elements.face.valueAsNumber*.5?' Check the quote format: the amount per bond is below half its face value.':''):'';
    };
-   form.oninput=preview;preview();
+   form.oninput=()=>{preview();scheduleSummary()};preview();
+   showSchedule();$('#f-repayment').addEventListener('change',showSchedule);
  }else form.oninput=null;
  showCall();$('#f-call')?.addEventListener('change',showCall);dialog.showModal();dialog.scrollTop=0;form.querySelector('input, select')?.focus({preventScroll:true});
 }
+let removedPayment=null;
+function readSchedule(numeric){return Array.from(form.querySelectorAll('.payment-row'),row=>Object.fromEntries(['date','interest','principal'].map(key=>{const input=row.querySelector('[data-payment="'+key+'"]');return [key,numeric&&key!=='date'?input.valueAsNumber:input.value]})))}
+function drawSchedule(rows){
+ const box=$('#scheduleRows');if(!box)return;
+ box.innerHTML=rows.map((row,i)=>'<fieldset class="payment-row"><legend>Payment '+(i+1)+'</legend>'+['date','interest','principal'].map(key=>'<label>'+({date:'Payment date',interest:'Interest (₹)',principal:'Principal repaid (₹)'}[key])+'<input data-payment="'+key+'" name="payment-'+i+'-'+key+'" type="'+(key==='date'?'date':'number')+'" '+(key==='date'?'':'min="0" step="0.01"')+' value="'+esc(row[key]??'')+'" required></label>').join('')+'<button type="button" data-remove-payment="'+i+'" aria-label="Remove payment '+(i+1)+'">Remove</button></fieldset>').join('');
+ showSchedule();
+}
+function scheduleSummary(){
+ const el=$('#scheduleTotal');if(!el)return;
+ const rows=readSchedule(true),principal=rows.reduce((a,x)=>a+(Number.isFinite(x.principal)?x.principal:0),0),face=form.elements.face.valueAsNumber;
+ el.textContent=rows.length+' payments · Principal entered '+currency(principal)+(Number.isFinite(face)?' / '+currency(face)+' outstanding.':'')+' Include all interest payments as well.';
+}
+function showSchedule(){
+ const box=$('#scheduleSection');if(!box)return;
+ const show=form.elements.repayment.value==='Amortizing';box.hidden=!show;
+ box.querySelectorAll('input,button').forEach(x=>x.disabled=!show);scheduleSummary();
+}
+form.addEventListener('click',e=>{
+ if(e.target.closest('[data-add-payment]')){
+   const rows=readSchedule(false);if(rows.length>=1200){notice('Maximum 1,200 payments.');return}
+   rows.push({date:'',interest:'',principal:0});drawSchedule(rows);saveDraft();$('#scheduleRows').lastElementChild.querySelector('input').focus();
+ }
+ const remove=e.target.closest('[data-remove-payment]');
+ if(remove){const rows=readSchedule(false),index=Number(remove.dataset.removePayment);removedPayment={index,row:rows.splice(index,1)[0]};drawSchedule(rows);form.querySelector('[data-undo-payment]').hidden=false;saveDraft();}
+ if(e.target.closest('[data-undo-payment]')&&removedPayment){const rows=readSchedule(false);rows.splice(removedPayment.index,0,removedPayment.row);drawSchedule(rows);removedPayment=null;form.querySelector('[data-undo-payment]').hidden=true;saveDraft();}
+});
 function closeEditor(){dialog.close()}
 dialog.addEventListener('cancel',e=>{if(form.inert)e.preventDefault()});
 dialog.addEventListener('close',()=>{if(lastFocus?.isConnected)lastFocus.focus();else main.querySelector('button')?.focus({preventScroll:true})});
@@ -185,6 +214,7 @@ function setDraftStatus(message){
 function saveDraft(){
  if(!isBondEditor()||!dialog.open)return;
  const values=Object.fromEntries(Array.from(form.querySelectorAll('[name]'),input=>[input.name,input.value]));
+ values.paymentRows=readSchedule(false);
  const key=draftKey();
  draftCache.set(key,values);
  try{sessionStorage.setItem(key,JSON.stringify(values));setDraftStatus('Draft saved in this tab.')}
@@ -209,6 +239,8 @@ form.addEventListener('submit',async e=>{
  else if(editMode==='remove'){nextB=nextB.filter(b=>b.id!==editId);if(nextChosen===editId)nextChosen=nextB[0].id}
  else{
  const order={total:form.elements.total.value===''?null:(data.quoteBasis==='unit'?data.total*data.quantity+data.fees:data.total),quantity:data.quantity,fees:data.fees};
+ data.schedule=readSchedule(true);
+ for(const key of Object.keys(data))if(key.startsWith('payment-'))delete data[key];
  delete data.total;delete data.quantity;delete data.fees;
  const old=editMode==='edit'?bonds.find(b=>b.id===editId):{};const id=editMode==='edit'?editId:'bond-'+Array.from(crypto.getRandomValues(new Uint32Array(2))).join('-');const b={callDate:'',callPrice:100,...old,...data,order,frequency:Number(data.frequency),id,sample:false};delete b.price;delete b.fee;nextB=nextB.filter(b=>!b.sample);const index=nextB.findIndex(b=>b.id===id);if(index===-1)nextB.push(b);else nextB[index]=b;nextChosen=id}
  if(nextB.length>20)throw Error('Compare up to 20 bonds. Remove one before adding another.');
@@ -217,7 +249,7 @@ form.addEventListener('submit',async e=>{
 });
 function download(){
  const b=bonds[active()],r=results[active()];
- const content='Date,Coupon INR,Principal INR,Total INR\r\n'+r.flows.map(x=>[x.date,b.face*b.coupon/100/b.frequency,x.date===b.maturity?b.face:0,x.amount*b.face/100].join(',')).join('\r\n');
+ const content='Date,Interest INR,Principal INR,Total INR\r\n'+r.flows.map(x=>[x.date,x.interest??b.face*b.coupon/100/b.frequency,x.principal??(x.date===b.maturity?b.face:0),x.amount*b.face/100].join(',')).join('\r\n');
  const url=URL.createObjectURL(new Blob([content],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download=b.name.replace(/[^a-zA-Z0-9-]+/g,'-')+'-cash-flows.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 main.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;

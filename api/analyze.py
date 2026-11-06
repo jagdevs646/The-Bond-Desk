@@ -3,7 +3,7 @@ import json
 
 from engine import analyze
 
-MAX_BODY = 65_536
+MAX_BODY = 2_097_152
 
 
 def respond(start_response, status, payload, extra_headers=()):
@@ -29,7 +29,7 @@ def app(environ, start_response):
     try:
         size = int(environ.get("CONTENT_LENGTH") or 0)
         if size > MAX_BODY:
-            return respond(start_response, "413 Payload Too Large", {"error": "Request exceeds 64 KiB."})
+            return respond(start_response, "413 Payload Too Large", {"error": "Request exceeds 2 MiB."})
         if size < 1:
             raise ValueError("Send a JSON body with a valid Content-Length.")
         payload = json.loads(environ["wsgi.input"].read(size))

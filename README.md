@@ -1,6 +1,6 @@
 # The Bond Desk
 
-The Bond Desk helps an INR fixed-income investor answer two questions: **What is the most I can pay for this bond at my required return? Which of my quoted bonds best meets my return and risk criteria?** It prices regular fixed-rate bullet bonds, handles a single optional call, and compares up to 20 candidates.
+The Bond Desk helps an INR fixed-income investor answer two questions: **What is the most I can pay for this bond at my required return? Which of my quoted bonds best meets my return and risk criteria?** It prices regular fixed-rate bullet bonds and dated installment schedules, handles a single optional call on bullet bonds, and compares up to 20 candidates.
 
 ## Try the example
 
@@ -56,11 +56,11 @@ Visit `/api/analyze` on the new domain. It should return `{"status":"ok","servic
 - **Decision.** A bond must meet yield, credit, liquidity, and maturity limits to qualify. A known failure gives **Skip**. Missing information gives **Review** when all known checks pass. Among qualifying bonds, the largest excess over its hurdle wins. Candidates tied to the nearest basis point share the lead.
 - **Stress testing.** Modified duration and rate shocks use maturity cash flows. The separate macro scenario reproduces the original calculator’s illustrative assumptions and has no effect on purchase rankings.
 
-The model assumes contractual payments and pre-tax returns. Floating coupons, irregular periods, amortising principal, multiple call dates, defaults, and option-adjusted pricing are outside its scope. Supply a current executable quote, comparable credit ratings, and issue terms. The sample data and macro assumptions are illustrative.
+The model assumes contractual payments and pre-tax returns. Floating coupons, automatic irregular-coupon generation, optional calls on installment bonds, multiple call dates, defaults, and option-adjusted pricing are outside its scope. Supply a current executable quote, comparable credit ratings, and issue terms. The sample data and macro assumptions are illustrative.
 
 ## API and tests
 
-`POST /api/analyze` accepts JSON with one shared `profile` and an array of 1–20 `bonds` (maximum body 64 KiB). Results follow request order. For broker orders, `order.quantity` counts bonds, `order.total` is the final payable amount in INR, and `order.fees` is the fee already included in that amount. Use `null` for an unavailable total. The API also supports saved clean-price quotes per ₹100 par. See [sample-request.json](sample-request.json) for both formats.
+`POST /api/analyze` accepts JSON with one shared `profile` and an array of 1–20 `bonds` (maximum body 2 MiB). Results follow request order. For broker orders, `order.quantity` counts bonds, `order.total` is the final payable amount in INR, and `order.fees` is the fee already included in that amount. Use `null` for an unavailable total. The API also supports saved clean-price quotes per ₹100 par. See [sample-request.json](sample-request.json) for both formats.
 
 ```bash
 curl -H "Content-Type: application/json" --data-binary @sample-request.json http://127.0.0.1:8000/api/analyze
@@ -83,3 +83,16 @@ Tests cover par pricing, accrual, zero coupons, negative yields, early calls, pu
 The app stores saved bonds and investor criteria in browser local storage and unapplied drafts in tab session storage. For calculations, it sends the bond terms and criteria to the same-origin Python API. The application does not write those requests to a database.
 
 [MIT License](LICENSE)
+
+
+## Multiple redemption dates
+
+In **Edit bond → Principal repayment**, choose **Principal repaid in installments**. The **Payment schedule** section appears immediately below. Click **Add payment date** for each future payout and enter its date, interest and principal in rupees **per bond**. Include interest-only dates with zero principal. Unequal amounts and irregular dates are supported. Copy the contractual payout schedule; the app does not assume equal installments or generate interest from the coupon field.
+
+Use the principal still outstanding at settlement in the face value field. Principal payments must sum to this value, dates must be after settlement, and the last principal repayment must match maturity. Duplicate dates must be combined. Up to 1,200 rows per bond are supported. Rows can be removed and the most recent removal undone. Unapplied schedule rows are saved with the editor draft.
+
+Returns are effective annual XIRR using actual days / 365, with the all-in purchase amount as the negative settlement cash flow. The net return includes purchase fees. Prices for installment schedules include accrued interest; the app does not present an inferred clean price. The purchase limit discounts the same dated payments at the required effective annual return. Optional calls on installment bonds require review and are excluded from qualifying purchase rankings.
+
+The API accepts `repayment: "Amortizing"` and `schedule: [{"date":"2027-11-05","interest":75,"principal":400}, {"date":"2031-11-05","interest":180,"principal":600}]`. This is an illustrative two-payment schedule for ₹1,000 outstanding principal, not the Keertana issue. Supply `order` and a matching maturity. Coupon/frequency are descriptive for this mode.
+
+Validation includes the [Microsoft XIRR worked example](https://support.microsoft.com/en-us/excel/functions/xirr-function?nochrome=true), fee and quantity invariance, fair-value identities, invalid schedules, and agreement between Python and browser calculations.

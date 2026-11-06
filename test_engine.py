@@ -14,6 +14,43 @@ profile = sample["profile"]
 
 
 class BondTest(unittest.TestCase):
+    def dated_fixture(self):
+        # Microsoft XIRR worked example: -10,000 then 2750, 4250, 3250, 2750.
+        rows = [dict(date=d, interest=750, principal=v) for d,v in
+                [("2008-03-01",2000),("2008-10-30",3500),("2009-02-15",2500),("2009-04-01",2000)]]
+        return dict(base, repayment="Amortizing", face=10000, maturity="2009-04-01",
+                    order=dict(quantity=1, fees=0, total=10000), schedule=rows), dict(profile, settlement="2008-01-01")
+
+    def test_dated_xirr_and_fee_quantity_invariance(self):
+        b,p = self.dated_fixture()
+        r = analyze(b,p)
+        self.assertAlmostEqual(r["net"],37.3362535,places=6)
+        self.assertAlmostEqual(r["worst"],r["net"])
+        self.assertEqual(r["totalInterest"],3000)
+        self.assertEqual(sum(x["principal"] for x in r["flows"]),10000)
+        six=analyze(dict(b,order=dict(quantity=6,fees=0,total=60000)),p)
+        self.assertAlmostEqual(six["net"],r["net"])
+        fee=analyze(dict(b,order=dict(quantity=6,fees=60,total=60060)),p)
+        self.assertLess(fee["net"],r["net"])
+        limit=analyze(dict(b,order=dict(quantity=1,fees=10,total=None)),p)
+        at_limit=analyze(dict(b,order=dict(quantity=1,fees=10,total=(limit["fair"]+limit["fee"])*100)),p)
+        self.assertAlmostEqual(at_limit["edge"],0,places=9)
+        self.assertAlmostEqual(r["duration"],-(r["shocks"][5]["price"]-r["shocks"][3]["price"])/.01/r["dirty"],places=3)
+        self.assertEqual(analyze(dict(b,call="Single date"),p)["verdict"],"Review")
+        reversed_rows=analyze(dict(b,schedule=list(reversed(b["schedule"]))),p)
+        self.assertAlmostEqual(reversed_rows["net"],r["net"])
+
+    def test_dated_validation(self):
+        b,p=self.dated_fixture()
+        for change in [dict(date="2008-01-01"),dict(date="2010-01-01"),dict(date="2008-10-30"),
+                       dict(interest=-1),dict(principal=100),dict(interest=0,principal=0)]:
+            rows=[dict(x) for x in b["schedule"]];rows[0].update(change)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                analyze(dict(b,schedule=rows),p)
+        with self.assertRaises(ValueError):analyze(dict(b,maturity="2009-05-01"),p)
+        negative=analyze(dict(b,order=dict(quantity=1,total=20000,fees=0)),p)
+        self.assertLess(negative["net"],0)
+
     def test_repayment_screen_and_quote_size(self):
         for fields in ({"repayment":"Amortizing"}, {"sample":False}):
             result = analyze(dict(base, **fields), profile)
@@ -94,6 +131,8 @@ class BondTest(unittest.TestCase):
             ({"price":140,"rating":"Unknown"},{}),({"call":"Unknown / other"},{}),
             ({"maturity":"2126-11-05","coupon":0,"frequency":12},{}),
         ]]
+        dated, criteria = self.dated_fixture()
+        inputs.extend([[dated,criteria], [dict(dated,order=dict(quantity=6,total=60060,fees=60)),criteria], [dict(dated,call='Unknown / other'),criteria]])
         js = 'import {analyze} from "./public/engine.mjs";import fs from "node:fs";console.log(JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(x=>analyze(...x))));'
         actual = json.loads(subprocess.check_output(["node","--input-type=module","-e",js],cwd=ROOT,input=json.dumps(inputs).encode()))
         def compare(a,b):

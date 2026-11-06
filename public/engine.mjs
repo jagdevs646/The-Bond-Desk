@@ -26,21 +26,39 @@ function solve(flows,cost,f){
 export function analyze(b,p){
  check(typeof b.name==='string'&&b.name.trim()&&b.name.length<=80,'Enter a bond name (up to 80 characters).');
  const repayment=b.repayment??(b.sample===false?'Unknown':'Bullet');
- if(repayment!=='Bullet'){
+ const dated=repayment==='Amortizing';
+ if(repayment!=='Bullet'&&(!dated||!b.schedule?.length)){
    const reason=repayment==='Amortizing'?'Principal is repaid in installments. A dated principal and interest schedule is required for an XIRR calculation.':'Confirm how principal is repaid before using this valuation.';
    return {blocked:true,verdict:'Review',missing:[reason],fail:[],edge:null,worst:null,required:null,duration:null};
  }
- const f=b.frequency;check([1,2,4,12].includes(f),'Choose a payment frequency.');
+ let f=b.frequency;check([1,2,4,12].includes(f),'Choose a payment frequency.');
  const face=number(b,'face',1,1e9),coupon=number(b,'coupon',0,50);
  const benchmark=number(b,'benchmark',-5,50),premium=number(b,'premium',0,50),target=number(p,'target',-5,50),horizon=number(p,'horizon',0.1,100);
  check(grades.includes(p.floor)&&levels.includes(p.liquidity),'Check your investor criteria.');
  check([...grades,'Unknown'].includes(b.rating)&&[...levels,'Unknown'].includes(b.liquidity),'Check rating and liquidity.');
  check(['None','Single date','Unknown / other'].includes(b.call),'Check call terms.');
  const s=date(p.settlement),m=date(b.maturity);check(m>s&&m<=monthAt(s,1200),'Maturity must be after settlement and within 100 years.');
- const dates=[];let prev=m;
- for(let k=0;prev>s;k++){dates.unshift(iso(prev));prev=monthAt(m,-(k+1)*12/f)}
- const elapsed=(s-prev)/(date(dates[0])-prev),periodCoupon=coupon/f,accrued=elapsed*periodCoupon;
- const flows=dates.map((d,i)=>({date:d,t:i+1-elapsed,amount:periodCoupon+(i===dates.length-1?100:0)}));
+ let dates,periodCoupon,accrued,flows;
+ if(dated){
+   check(Array.isArray(b.schedule)&&b.schedule.length>=1&&b.schedule.length<=1200,'Enter 1 to 1,200 payment rows.');
+   flows=b.schedule.map(row=>{
+     check(row&&typeof row==='object','Check each payment row.');
+     const d=date(row.date);check(d>s&&d<=m,'Every payment date must be after settlement and on or before maturity.');
+     const interest=number(row,'interest',0,1e9),principal=number(row,'principal',0,face);
+     check(interest+principal>0,'Each payment row needs interest or principal above zero.');
+     return {date:iso(d),t:(d-s)/86400000/365,amount:(interest+principal)*100/face,interest,principal};
+   }).sort((a,b)=>a.date.localeCompare(b.date));
+   check(new Set(flows.map(x=>x.date)).size===flows.length,'Combine payments on the same date into one row.');
+   check(Math.abs(flows.reduce((a,x)=>a+x.principal,0)-face)<.005,'Principal repayments must equal the outstanding principal per bond. Check the face value and schedule.');
+   check(flows.at(-1).date===b.maturity&&flows.at(-1).principal>0,'The final principal repayment must be on the maturity date.');
+   check(b.order!==undefined,'Enter a broker amount or leave it blank; clean-price quotes are not supported for installment schedules.');
+   f=1;accrued=0;periodCoupon=0;dates=flows.map(x=>x.date);
+ }else{
+   dates=[];let prev=m;
+   for(let k=0;prev>s;k++){dates.unshift(iso(prev));prev=monthAt(m,-(k+1)*12/f)}
+   const elapsed=(s-prev)/(date(dates[0])-prev);periodCoupon=coupon/f;accrued=elapsed*periodCoupon;
+   flows=dates.map((d,i)=>({date:d,t:i+1-elapsed,amount:periodCoupon+(i===dates.length-1?100:0)}));
+ }
  // Older workspaces store a clean quote per 100. New entries store broker amounts in rupees.
  const usesOrder = b.order !== undefined;
  let price, fee;
@@ -64,7 +82,7 @@ export function analyze(b,p){
  const ytm = quoted ? solve(flows,dirty,f) : null;
  const net = quoted ? solve(flows,cost,f) : null;
  let callYield=null, callFlows=null;
- if(b.call==='Single date'){const i=dates.indexOf(b.callDate);check(i>=0&&i<dates.length-1,'Call date must be a future coupon date before maturity.');const redemption=number(b,'callPrice',1,500);
+ if(b.call==='Single date'&&!dated){const i=dates.indexOf(b.callDate);check(i>=0&&i<dates.length-1,'Call date must be a future coupon date before maturity.');const redemption=number(b,'callPrice',1,500);
  callFlows=flows.slice(0,i+1).map(x=>({...x}));callFlows[i].amount=periodCoupon+redemption;if(quoted)callYield=solve(callFlows,cost,f)}
  const effective=y=>100*Math.expm1(f*Math.log1p(y/(100*f)));
  const worst=quoted?effective(Math.min(net,callYield??net)):null,required=Math.max(target,benchmark+premium),edge=quoted?worst-required:null;
@@ -75,10 +93,11 @@ export function analyze(b,p){
  const fail=[],missing=[];
  if(b.rating==='Unknown')missing.push('Confirm the issue’s credit rating.');else if(b.rating==='D'||grades.indexOf(b.rating)>grades.indexOf(p.floor))fail.push('The '+b.rating+' rating falls outside your credit screen.');
  if(b.liquidity==='Unknown')missing.push('Verify secondary-market liquidity.');else if(levels.indexOf(b.liquidity)<levels.indexOf(p.liquidity))fail.push('Liquidity is below your '+p.liquidity.toLowerCase()+' minimum.');
- if(b.call==='Unknown / other')missing.push('Confirm all call terms; this model supports one optional call date.');
+ if(dated&&b.call!=='None')missing.push('Installment schedules do not model optional calls. Confirm no call option before using the purchase screen.');
+ else if(b.call==='Unknown / other')missing.push('Confirm all call terms; this model supports one optional call date.');
  if(m>monthAt(s,Math.round(horizon*12)))fail.push('Principal matures beyond your holding horizon.');
  if(edge < -1e-8)fail.push('The modeled return falls below your required yield.');
  if(!quoted)missing.push('Add the broker’s total payable to check the return at the offered price.');
  const verdict=fail.length?'Skip':missing.length?'Review':'Consider purchase';
- return {price,fee,ytm,net,callYield,worst,required,edge,fair,dirty,cost,accrued,duration,shocks,flows,fail,missing,verdict,current:quoted?coupon/price*100:null,face,annualCoupon:face*coupon/100};
+ return {dated,price,fee,ytm,net,callYield,worst,required,edge,fair,dirty,cost,accrued,duration,shocks,flows,fail,missing,verdict,current:quoted&&!dated?coupon/price*100:null,face,annualCoupon:face*coupon/100,totalInterest:dated?flows.reduce((a,x)=>a+x.interest,0):flows.length*face*coupon/100/f};
 }

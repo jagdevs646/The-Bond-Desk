@@ -53,7 +53,8 @@ def solve(flows, price, frequency):
 def analyze(b, p):
     require(isinstance(b["name"], str) and b["name"].strip() and len(b["name"]) <= 80, "Enter a bond name.")
     repayment = b.get("repayment", "Unknown" if b.get("sample") is False else "Bullet")
-    if repayment != "Bullet":
+    dated = repayment == "Amortizing"
+    if repayment != "Bullet" and (not dated or not b.get("schedule")):
         reason = ("Principal is repaid in installments. A dated principal and interest schedule is required for an XIRR calculation."
                   if repayment == "Amortizing" else "Confirm how principal is repaid before using this valuation.")
         return dict(blocked=True, verdict="Review", missing=[reason], fail=[], edge=None, worst=None, required=None, duration=None)
@@ -68,16 +69,39 @@ def analyze(b, p):
     require(b["call"] in ("None", "Single date", "Unknown / other"), "Check call terms.")
     s, m = map(date.fromisoformat, (p["settlement"], b["maturity"]))
     require(s.year >= 1900 and s < m <= shift_months(s, 1200), "Maturity must be after settlement and within 100 years.")
-    dates, prev = [], m
-    while prev > s:
-        dates.append(prev)
-        prev = shift_months(m, -len(dates) * (12 // f))
-    dates.reverse()
-    elapsed = (s-prev).days / (dates[0]-prev).days
-    payment = coupon / f
-    accrued = payment * elapsed
-    flows = [dict(date=d.isoformat(), t=i+1-elapsed, amount=payment+(100 if d == m else 0))
-             for i, d in enumerate(dates)]
+    if dated:
+        schedule = b.get("schedule")
+        require(isinstance(schedule, list) and 1 <= len(schedule) <= 1200, "Enter 1 to 1,200 payment rows.")
+        flows = []
+        for row in schedule:
+            require(isinstance(row, dict), "Check each payment row.")
+            d = date.fromisoformat(row["date"])
+            require(s < d <= m, "Every payment date must be after settlement and on or before maturity.")
+            interest = number(row, "interest", 0, 1e9)
+            principal = number(row, "principal", 0, face)
+            require(interest + principal > 0, "Each payment row needs interest or principal above zero.")
+            flows.append(dict(date=d.isoformat(), t=(d-s).days/365,
+                              amount=(interest+principal)*100/face, interest=interest, principal=principal))
+        flows.sort(key=lambda row: row["date"])
+        require(len({row["date"] for row in flows}) == len(flows), "Combine payments on the same date into one row.")
+        require(abs(sum(row["principal"] for row in flows)-face) < .005,
+                "Principal repayments must equal the outstanding principal per bond. Check the face value and schedule.")
+        require(flows[-1]["date"] == m.isoformat() and flows[-1]["principal"] > 0,
+                "The final principal repayment must be on the maturity date.")
+        require("order" in b, "Enter a broker amount or leave it blank; clean-price quotes are not supported for installment schedules.")
+        f, accrued, payment = 1, 0, 0
+        dates = [date.fromisoformat(row["date"]) for row in flows]
+    else:
+        dates, prev = [], m
+        while prev > s:
+            dates.append(prev)
+            prev = shift_months(m, -len(dates) * (12 // f))
+        dates.reverse()
+        elapsed = (s-prev).days / (dates[0]-prev).days
+        payment = coupon / f
+        accrued = payment * elapsed
+        flows = [dict(date=d.isoformat(), t=i+1-elapsed, amount=payment+(100 if d == m else 0))
+                 for i, d in enumerate(dates)]
     if "order" in b:
         order = b["order"]
         require(isinstance(order, dict), "Check the broker order details.")
@@ -95,7 +119,7 @@ def analyze(b, p):
     ytm = solve(flows, dirty, f) if dirty is not None else None
     net = solve(flows, cost, f) if cost is not None else None
     call_yield, call_flows = None, []
-    if b["call"] == "Single date":
+    if b["call"] == "Single date" and not dated:
         call = date.fromisoformat(b["callDate"])
         require(call in dates[:-1], "Call date must be a future coupon date before maturity.")
         call_flows = [dict(row) for row in flows[:dates.index(call)+1]]
@@ -119,7 +143,9 @@ def analyze(b, p):
         missing.append("Verify secondary-market liquidity.")
     elif LEVELS.index(b["liquidity"]) < LEVELS.index(p["liquidity"]):
         fail.append(f"Liquidity is below your {p['liquidity'].lower()} minimum.")
-    if b["call"] == "Unknown / other":
+    if dated and b["call"] != "None":
+        missing.append("Installment schedules do not model optional calls. Confirm no call option before using the purchase screen.")
+    elif b["call"] == "Unknown / other":
         missing.append("Confirm all call terms; this model supports one optional call date.")
     if m > shift_months(s, math.floor(horizon*12+.5)):
         fail.append("Principal matures beyond your holding horizon.")
@@ -127,7 +153,8 @@ def analyze(b, p):
         missing.append("Add the broker’s total payable to check the return at the offered price.")
     elif edge < -1e-8:
         fail.append("The modeled return falls below your required yield.")
-    return dict(price=price, fee=fee, ytm=ytm, net=net, callYield=call_yield, worst=worst, required=required, edge=edge,
+    return dict(dated=dated, price=price, fee=fee, ytm=ytm, net=net, callYield=call_yield, worst=worst, required=required, edge=edge,
                 fair=fair, dirty=dirty, cost=cost, accrued=accrued, duration=duration, shocks=shocks,
                 flows=flows, fail=fail, missing=missing, verdict="Skip" if fail else "Review" if missing else "Consider purchase",
-                current=coupon/price*100 if price is not None else None, face=face, annualCoupon=face*coupon/100)
+                current=coupon/price*100 if price is not None and not dated else None, face=face, annualCoupon=face*coupon/100,
+                totalInterest=sum(row["interest"] for row in flows) if dated else len(flows)*face*coupon/100/f)
